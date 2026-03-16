@@ -1,0 +1,294 @@
+Analise a arquitetura abaixo do meu ambiente e aponte vulnerabilidades de segurança e correções sugeridas:
+
+empresa: PhishCorp
+cloud: AWS
+ambiente: produção
+
+contas:
+  - nome: main-account
+    id: "111111111111"
+
+rede:
+  vpc:
+    nome: vpc-prod
+    cidr: 10.0.0.0/16
+    subnets:
+      - nome: public-subnet-a
+        cidr: 10.0.1.0/24
+        az: sa-east-1a
+        publica: true
+      - nome: public-subnet-b
+        cidr: 10.0.2.0/24
+        az: sa-east-1b
+        publica: true
+      - nome: private-subnet-a
+        cidr: 10.0.10.0/24
+        az: sa-east-1a
+        publica: false
+      - nome: private-subnet-b
+        cidr: 10.0.11.0/24
+        az: sa-east-1b
+        publica: false
+
+    internet_gateway: habilitado
+    nat_gateway: desabilitado
+    route_tables:
+      - nome: public-rt
+        associada_a:
+          - public-subnet-a
+          - public-subnet-b
+        rotas:
+          - destino: 0.0.0.0/0
+            alvo: internet-gateway
+      - nome: private-rt
+        associada_a:
+          - private-subnet-a
+          - private-subnet-b
+        rotas:
+          - destino: 0.0.0.0/0
+            alvo: internet-gateway
+
+security_groups:
+  - nome: sg-alb
+    inbound:
+      - porta: 80
+        protocolo: tcp
+        origem: 0.0.0.0/0
+      - porta: 443
+        protocolo: tcp
+        origem: 0.0.0.0/0
+    outbound:
+      - porta: all
+        protocolo: all
+        destino: 0.0.0.0/0
+
+  - nome: sg-web
+    inbound:
+      - porta: 22
+        protocolo: tcp
+        origem: 0.0.0.0/0
+      - porta: 80
+        protocolo: tcp
+        origem: 0.0.0.0/0
+      - porta: 443
+        protocolo: tcp
+        origem: 0.0.0.0/0
+      - porta: 3000
+        protocolo: tcp
+        origem: 0.0.0.0/0
+    outbound:
+      - porta: all
+        protocolo: all
+        destino: 0.0.0.0/0
+
+  - nome: sg-db
+    inbound:
+      - porta: 3306
+        protocolo: tcp
+        origem: 0.0.0.0/0
+      - porta: 5432
+        protocolo: tcp
+        origem: 0.0.0.0/0
+    outbound:
+      - porta: all
+        protocolo: all
+        destino: 0.0.0.0/0
+
+  - nome: sg-admin
+    inbound:
+      - porta: 22
+        protocolo: tcp
+        origem: 0.0.0.0/0
+      - porta: 3389
+        protocolo: tcp
+        origem: 0.0.0.0/0
+    outbound:
+      - porta: all
+        protocolo: all
+        destino: 0.0.0.0/0
+
+compute:
+  ec2:
+    - nome: bastion-admin
+      subnet: public-subnet-a
+      public_ip: true
+      security_group: sg-admin
+      iam_role: admin-fullaccess-role
+      ami: ami-outdated-ubuntu-18
+      user_data: |
+        #!/bin/bash
+        apt update
+        apt install -y docker.io awscli mysql-client
+        echo AWS_ACCESS_KEY_ID=AKIAEXAMPLE123 >> /etc/environment
+        echo AWS_SECRET_ACCESS_KEY=SECRETEXAMPLE123 >> /etc/environment
+
+    - nome: web-01
+      subnet: public-subnet-a
+      public_ip: true
+      security_group: sg-web
+      iam_role: ec2-s3-full-role
+      ami: ami-outdated-amazon-linux
+      app: nodejs-api
+      env:
+        APP_ENV: production
+        JWT_SECRET: "123456"
+        DB_HOST: "db-prod.xxxxxx.sa-east-1.rds.amazonaws.com"
+        DB_USER: "admin"
+        DB_PASS: "Admin123"
+        S3_BUCKET: "phishcorp-prod-data"
+
+    - nome: web-02
+      subnet: public-subnet-b
+      public_ip: true
+      security_group: sg-web
+      iam_role: ec2-s3-full-role
+      ami: ami-outdated-amazon-linux
+      app: nodejs-api
+      env:
+        APP_ENV: production
+        JWT_SECRET: "123456"
+        DB_HOST: "db-prod.xxxxxx.sa-east-1.rds.amazonaws.com"
+        DB_USER: "admin"
+        DB_PASS: "Admin123"
+        S3_BUCKET: "phishcorp-prod-data"
+
+load_balancer:
+  alb:
+    nome: prod-alb
+    internet_facing: true
+    listeners:
+      - porta: 80
+        acao: forward
+      - porta: 443
+        tls_policy: TLS-1-0
+        certificado: acm-cert-prod
+        acao: forward
+    target_group:
+      portas:
+        - 80
+        - 3000
+      targets:
+        - web-01
+        - web-02
+
+banco:
+  rds:
+    nome: db-prod
+    engine: mysql
+    versao: "5.7"
+    multi_az: false
+    subnet_group:
+      - public-subnet-a
+      - public-subnet-b
+    public_access: true
+    security_group: sg-db
+    storage_encrypted: false
+    backup_retention_days: 0
+    deletion_protection: false
+    master_username: admin
+    master_password: Admin123
+
+armazenamento:
+  s3:
+    - bucket: phishcorp-prod-data
+      versioning: false
+      encryption: false
+      public_access_block: false
+      acl: public-read-write
+      logging: false
+      objetos:
+        - nome: customers.csv
+        - nome: backups/db-backup.sql
+        - nome: uploads/
+    - bucket: phishcorp-logs
+      versioning: false
+      encryption: false
+      public_access_block: false
+      acl: public-read
+      logging: false
+
+iam:
+  usuarios:
+    - nome: devops-user
+      console_access: true
+      mfa: false
+      access_keys_ativas: 2
+      politicas:
+        - AdministratorAccess
+
+    - nome: intern-user
+      console_access: true
+      mfa: false
+      access_keys_ativas: 1
+      politicas:
+        - AmazonS3FullAccess
+        - IAMFullAccess
+
+  roles:
+    - nome: admin-fullaccess-role
+      anexadas:
+        - AdministratorAccess
+    - nome: ec2-s3-full-role
+      anexadas:
+        - AmazonS3FullAccess
+        - AmazonEC2FullAccess
+        - IAMReadOnlyAccess
+
+monitoramento:
+  cloudtrail:
+    habilitado: false
+  config:
+    habilitado: false
+  guardduty:
+    habilitado: false
+  security_hub:
+    habilitado: false
+  cloudwatch_logs:
+    habilitado: false
+  vpc_flow_logs:
+    habilitado: false
+
+containerizacao:
+  ecr:
+    repositorio: phishcorp-api
+    image_scanning: false
+
+cicd:
+  github_actions:
+    branch_principal: main
+    requer_aprovacao: false
+    secrets_no_repositorio:
+      AWS_ACCESS_KEY_ID: "AKIAEXAMPLE123"
+      AWS_SECRET_ACCESS_KEY: "SECRETEXAMPLE123"
+      DB_PASS: "Admin123"
+    pipeline:
+      - etapa: build
+      - etapa: test
+      - etapa: deploy-prod-direto
+    deploy:
+      destino: ec2-web-instances
+      metodo: ssh-password
+
+dns:
+  route53:
+    zona: phishcorp.com
+    registros:
+      - tipo: A
+        nome: app.phishcorp.com
+        destino: prod-alb
+      - tipo: A
+        nome: admin.phishcorp.com
+        destino: bastion-admin-public-ip
+
+backups:
+  snapshots_automaticos: false
+  copia_cross_region: false
+
+documentacao_interna:
+  wiki:
+    url: https://wiki.phishcorp.local
+    trecho: |
+      Credenciais de emergência:
+      admin / Admin123
+      AWS root email: root@phishcorp.com
+      AWS root password: Root@123456
