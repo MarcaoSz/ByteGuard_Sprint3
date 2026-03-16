@@ -1,0 +1,40 @@
+Veredito: muito provável ser phishing
+
+Principais sinais observados na captura
+- Link suspeito: o botão “Verify Now” aponta para http://www.example-verification.xyz (TLD .xyz e sem HTTPS). Não é domínio oficial do banco e o uso de HTTP permite interceptação.
+- Inconsistência de domínio/marca: e-mail aparenta vir de “noreply@natwestbank.com”, porém o link não pertence ao domínio da instituição. Bancos legítimos usam domínios próprios e links sob o mesmo domínio.
+- Linguagem de urgência/ameaça: “Urgent: Verify Your Account to Avoid Suspension” e “temporarily suspended” pressionam ação imediata — padrão típico de engenharia social.
+- Saudação genérica: “Dear Customer” em vez de nome do cliente — comum em envios massivos de phishing.
+- Pedido para “verificar informações” via link: bancos confiáveis orientam acessar o app/site oficial digitando o endereço manualmente, não por links de e-mail.
+
+Risco/impacto prático
+- Roubo de credenciais e dados pessoais.
+- Possível instalação de malware se o link baixar arquivos/encaminhar para páginas maliciosas.
+- Comprometimento de contas financeiras.
+
+O que você deve fazer agora (usuário)
+- Não clique no link nem responda ao e-mail.
+- Se chegou a clicar ou inserir dados: troque imediatamente a senha da conta no site/app oficial, habilite MFA e avise o banco pelos canais oficiais.
+- Rode um antivírus/EDR atualizado no dispositivo utilizado.
+- Reporte como phishing no seu cliente de e-mail e ao provedor (ex.: abuse@ do domínio) e ao banco.
+
+Validações técnicas recomendadas (time de segurança)
+- Checar cabeçalhos completos:
+  - Authentication-Results (SPF/DKIM/DMARC) e alinhamento de domínios (From, Return-Path, d= do DKIM).
+  - Received: cadeia de servidores usados no envio.
+  - Reply-To e Envelope-From divergentes do domínio exibido.
+- Extrair e validar o(s) URL(s) de destino real (sem redirecionamentos) em sandbox:
+  - WHOIS/registro do domínio .xyz, data de criação e hospedagem.
+  - Reputação (blocklists), certificado TLS (se houver), presença de homógrafos Unicode.
+- Bloquear o domínio/URL no e-mail gateway, DNS filtering/Proxy e EDR; adicionar IOC em SIEM.
+- Se houve cliques, verificar logs de proxy/DNS/EDR e credenciais possivelmente expostas; acionar playbook de resposta.
+
+Mitigações e hardening (anti-phishing)
+- Implementar/ajustar SPF, DKIM e DMARC (p=reject) para seu domínio; ativar MTA-STS e TLS-RPT.
+- Habilitar proteção no gateway de e-mail: URL rewriting/time-of-click, bloqueio de TLDs de alto risco, detecção de brand impersonation e anexos perigosos.
+- Educar usuários: nunca clicar em links bancários recebidos por e-mail; sempre acessar pelo app/site digitando o endereço.
+- Enforce MFA e senha forte em contas críticas; monitorar tentativas de login anômalas.
+- Criar processo simples de reporte de phishing e retroalimentar IOC nos controles.
+
+Conclusão
+Os elementos combinados (domínio do link sem relação com a marca, uso de HTTP, urgência, saudação genérica e pedido de “verificação”) caracterizam forte indício de phishing. Trate como malicioso, bloqueie os IOCs e siga o playbook de resposta.
